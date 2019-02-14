@@ -1,44 +1,24 @@
-/*
-
-sego分词服务器同时提供了两种模式：
-
-	"/"	分词演示网页
-	"/json"	JSON格式的RPC服务
-		输入：
-			POST或GET模式输入text参数
-		输出JSON格式：
-			{
-				segments:[
-					{"text":"服务器", "pos":"n"},
-					{"text":"指令", "pos":"n"},
-					...
-				]
-			}
-
-
-测试服务器见 http://sego.weiboglass.com
-
-*/
-
 package main
 
 import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/huichen/sego"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"runtime"
+
+	"github.com/nexushubs/sego"
 )
 
 var (
-	host      = flag.String("host", "", "HTTP服务器主机名")
-	port      = flag.Int("port", 8080, "HTTP服务器端口")
-	dict      = flag.String("dict", "../data/dictionary.txt", "词典文件")
+	host         = flag.String("host", "", "HTTP服务器主机名")
+	port         = flag.Int("port", 5678, "HTTP服务器端口")
+	dict         = flag.String("dict", getDict(), "词典文件")
 	staticFolder = flag.String("static_folder", "static", "静态页面存放的目录")
-	segmenter = sego.Segmenter{}
+	segmenter    = sego.Segmenter{}
 )
 
 type JsonResponse struct {
@@ -71,6 +51,30 @@ func JsonRpcServer(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, string(response))
 }
 
+// fileExists checks if a file exists and is not a directory before we
+// try using it to prevent further errors.
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+func getDict() string {
+	dictionary := os.Getenv("DICT")
+	if !fileExists(dictionary) {
+		dictionary = "./dict.txt"
+		if !fileExists(dictionary) {
+			dictionary = "../data/dict.txt"
+			if !fileExists(dictionary) {
+				panic("Unable to locate dict file.")
+			}
+		}
+	}
+	return dictionary
+}
+
 func main() {
 	flag.Parse()
 
@@ -83,5 +87,8 @@ func main() {
 	http.HandleFunc("/json", JsonRpcServer)
 	http.Handle("/", http.FileServer(http.Dir(*staticFolder)))
 	log.Print("服务器启动")
-	http.ListenAndServe(fmt.Sprintf("%s:%d", *host, *port), nil)
+	err := http.ListenAndServe(fmt.Sprintf("%s:%d", *host, *port), nil)
+	if err != nil {
+		log.Println(err)
+	}
 }
